@@ -2,3 +2,10 @@
 /bazel-*
 # ignore non-bazel build products
 /build
+
+# Buck
+/buck-out/
+/.buckd/
+/buckaroo/
+.buckconfig.local
+BUCKAROO_DEPS
