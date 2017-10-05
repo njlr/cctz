@@ -1,6 +1,6 @@
 cxx_library(
   name = 'cctz',
-  header_namespace = '',
+  header_namespace = 'cctz',
   exported_headers = subdir_glob([
     ('include', '*.h'),
   ]),
@@ -13,9 +13,6 @@ cxx_library(
   excludes = glob([
     'src/*_test.cc',
   ])),
-  compiler_flags = [
-    '-std=c++11',
-  ],
   visibility = [
     'PUBLIC',
   ],
