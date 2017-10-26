@@ -8,10 +8,11 @@ cxx_library(
     ('src', '**/*.h'),
   ]),
   srcs = glob([
-    'src/*.cc',
+    'src/**/*.cc',
   ],
   excludes = glob([
-    'src/*_test.cc',
+    'src/benchmarks.cc',
+    'src/**/*_test.cc',
   ])),
   visibility = [
     'PUBLIC',
