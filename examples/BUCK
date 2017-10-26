@@ -3,9 +3,6 @@ cxx_binary(
   srcs = [
     'classic.cc',
   ],
-  compiler_flags = [
-    '-std=c++11',
-  ],
   deps = [
     '//:cctz',
   ],
@@ -15,9 +12,6 @@ cxx_binary(
   name = 'epoch-shift',
   srcs = [
     'epoch_shift.cc',
-  ],
-  compiler_flags = [
-    '-std=c++11',
   ],
   deps = [
     '//:cctz',
@@ -29,9 +23,6 @@ cxx_binary(
   srcs = [
     'example1.cc',
   ],
-  compiler_flags = [
-    '-std=c++11',
-  ],
   deps = [
     '//:cctz',
   ],
@@ -41,9 +32,6 @@ cxx_binary(
   name = 'example2',
   srcs = [
     'example2.cc',
-  ],
-  compiler_flags = [
-    '-std=c++11',
   ],
   deps = [
     '//:cctz',
@@ -55,9 +43,6 @@ cxx_binary(
   srcs = [
     'example3.cc',
   ],
-  compiler_flags = [
-    '-std=c++11',
-  ],
   deps = [
     '//:cctz',
   ],
@@ -68,9 +53,6 @@ cxx_binary(
   srcs = [
     'example4.cc',
   ],
-  compiler_flags = [
-    '-std=c++11',
-  ],
   deps = [
     '//:cctz',
   ],
@@ -80,9 +62,6 @@ cxx_binary(
   name = 'hello',
   srcs = [
     'hello.cc',
-  ],
-  compiler_flags = [
-    '-std=c++11',
   ],
   deps = [
     '//:cctz',
