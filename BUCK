@@ -12,7 +12,7 @@ cxx_library(
   ],
   excludes = glob([
     'src/benchmarks.cc',
-    'src/*_test.cc',
+    'src/**/*_test.cc',
   ])),
   visibility = [
     'PUBLIC',
