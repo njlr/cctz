@@ -23,8 +23,9 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <utility>
 
-#include "civil_time.h"
+#include "cctz/civil_time.h"
 
 namespace cctz {
 
@@ -32,6 +33,24 @@ namespace cctz {
 template <typename D>
 using time_point = std::chrono::time_point<std::chrono::system_clock, D>;
 using sys_seconds = std::chrono::duration<std::int_fast64_t>;
+
+namespace detail {
+template <typename D>
+inline std::pair<time_point<sys_seconds>, D>
+split_seconds(const time_point<D>& tp) {
+  auto sec = std::chrono::time_point_cast<sys_seconds>(tp);
+  auto sub = tp - sec;
+  if (sub.count() < 0) {
+    sec -= sys_seconds(1);
+    sub += sys_seconds(1);
+  }
+  return {sec, std::chrono::duration_cast<D>(sub)};
+}
+inline std::pair<time_point<sys_seconds>, sys_seconds>
+split_seconds(const time_point<sys_seconds>& tp) {
+  return {tp, sys_seconds(0)};
+}
+}  // namespace detail
 
 // cctz::time_zone is an opaque, small, value-type class representing a
 // geo-political region within which particular rules are used for mapping
@@ -43,6 +62,7 @@ using sys_seconds = std::chrono::duration<std::int_fast64_t>;
 //
 // Example:
 //   cctz::time_zone utc = cctz::utc_time_zone();
+//   cctz::time_zone pst = cctz::fixed_time_zone(std::chrono::hours(-8));
 //   cctz::time_zone loc = cctz::local_time_zone();
 //   cctz::time_zone lax;
 //   if (!cctz::load_time_zone("America/Los_Angeles", &lax)) { ... }
@@ -80,23 +100,25 @@ class time_zone {
   absolute_lookup lookup(const time_point<sys_seconds>& tp) const;
   template <typename D>
   absolute_lookup lookup(const time_point<D>& tp) const {
-    return lookup(std::chrono::time_point_cast<sys_seconds>(tp));
+    return lookup(detail::split_seconds(tp).first);
   }
 
   // A civil_lookup represents the absolute time(s) (time_point) that
   // correspond to the given civil time (cctz::civil_second) within this
-  // time_zone. Usually the given civil time represents a unique instant in
-  // time, in which case the conversion is unambiguous and correct. However,
-  // within this time zone, the given civil time may be skipped (e.g., during
-  // a positive UTC offset shift), or repeated (e.g., during a negative UTC
-  // offset shift). To account for these possibilities, civil_lookup is richer
-  // than just a single output time_point.
+  // time_zone. Usually the given civil time represents a unique instant
+  // in time, in which case the conversion is unambiguous. However,
+  // within this time zone, the given civil time may be skipped (e.g.,
+  // during a positive UTC offset shift), or repeated (e.g., during a
+  // negative UTC offset shift). To account for these possibilities,
+  // civil_lookup is richer than just a single time_point.
   //
-  // In all cases the civil_lookup::kind enum will indicate the nature of the
-  // given civil-time argument, and the pre, trans, and post, members will
-  // give the absolute time answers using the pre-transition offset, the
-  // transition point itself, and the post-transition offset, respectively
-  // (these are all equal if kind == UNIQUE).
+  // In all cases the civil_lookup::kind enum will indicate the nature
+  // of the given civil-time argument, and the pre, trans, and post
+  // members will give the absolute time answers using the pre-transition
+  // offset, the transition point itself, and the post-transition offset,
+  // respectively (all three times are equal if kind == UNIQUE).  If any
+  // of these three absolute times is outside the representable range of a
+  // time_point<sys_seconds> the field is set to its maximum/minimum value.
   //
   // Example:
   //   cctz::time_zone lax;
@@ -125,12 +147,12 @@ class time_zone {
   struct civil_lookup {
     enum civil_kind {
       UNIQUE,    // the civil time was singular (pre == trans == post)
-      SKIPPED,   // the civil time did not exist
-      REPEATED,  // the civil time was ambiguous
+      SKIPPED,   // the civil time did not exist (pre >= trans > post)
+      REPEATED,  // the civil time was ambiguous (pre < trans <= post)
     } kind;
-    time_point<sys_seconds> pre;    // Uses the pre-transition offset
-    time_point<sys_seconds> trans;  // Instant of civil-offset change
-    time_point<sys_seconds> post;   // Uses the post-transition offset
+    time_point<sys_seconds> pre;    // uses the pre-transition offset
+    time_point<sys_seconds> trans;  // instant of civil-offset change
+    time_point<sys_seconds> post;   // uses the post-transition offset
   };
   civil_lookup lookup(const civil_second& cs) const;
 
@@ -152,6 +174,11 @@ bool load_time_zone(const std::string& name, time_zone* tz);
 
 // Returns a time_zone representing UTC. Cannot fail.
 time_zone utc_time_zone();
+
+// Returns a time zone that is a fixed offset (seconds east) from UTC.
+// Note: If the absolute value of the offset is greater than 24 hours
+// you'll get UTC (i.e., zero offset) instead.
+time_zone fixed_time_zone(const sys_seconds& offset);
 
 // Returns a time zone representing the local time zone. Falls back to UTC.
 time_zone local_time_zone();
@@ -178,26 +205,11 @@ inline time_point<sys_seconds> convert(const civil_second& cs,
 }
 
 namespace detail {
-template <typename D>
-inline std::pair<time_point<sys_seconds>, D>
-split_seconds(const time_point<D>& tp) {
-  auto sec = std::chrono::time_point_cast<sys_seconds>(tp);
-  auto sub = tp - sec;
-  if (sub.count() < 0) {
-    sec -= sys_seconds(1);
-    sub += sys_seconds(1);
-  }
-  return {sec, std::chrono::duration_cast<D>(sub)};
-}
-inline std::pair<time_point<sys_seconds>, sys_seconds>
-split_seconds(const time_point<sys_seconds>& tp) {
-  return {tp, sys_seconds(0)};
-}
 using femtoseconds = std::chrono::duration<std::int_fast64_t, std::femto>;
 std::string format(const std::string&, const time_point<sys_seconds>&,
                    const femtoseconds&, const time_zone&);
 bool parse(const std::string&, const std::string&, const time_zone&,
-           time_point<sys_seconds>*, femtoseconds*);
+           time_point<sys_seconds>*, femtoseconds*, std::string* err = nullptr);
 }  // namespace detail
 
 // Formats the given time_point in the given cctz::time_zone according to

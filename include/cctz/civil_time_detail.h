@@ -25,12 +25,10 @@
 #define CONSTEXPR_D constexpr  // data
 #define CONSTEXPR_F constexpr  // function
 #define CONSTEXPR_M constexpr  // member
-#define CONSTEXPR_T constexpr  // template
 #else
 #define CONSTEXPR_D const
 #define CONSTEXPR_F inline
 #define CONSTEXPR_M
-#define CONSTEXPR_T
 #endif
 
 namespace cctz {
@@ -95,10 +93,10 @@ CONSTEXPR_F int days_per_year(year_t y, month_t m) noexcept {
   return is_leap_year(y + (m > 2)) ? 366 : 365;
 }
 CONSTEXPR_F int days_per_month(year_t y, month_t m) noexcept {
-  CONSTEXPR_D signed char k_days_per_month[12] = {
-      31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31  // non leap year
+  CONSTEXPR_D int k_days_per_month[1 + 12] = {
+      -1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31  // non leap year
   };
-  return k_days_per_month[m - 1] + (m == 2 && is_leap_year(y));
+  return k_days_per_month[m] + (m == 2 && is_leap_year(y));
 }
 
 CONSTEXPR_F fields n_day(year_t y, month_t m, diff_t d, diff_t cd,
@@ -111,12 +109,21 @@ CONSTEXPR_F fields n_day(year_t y, month_t m, diff_t d, diff_t cd,
   }
   y += (d / 146097) * 400;
   d = d % 146097 + cd;
-  if (d <= 0) {
-    y -= 400;
-    d += 146097;
-  } else if (d > 146097) {
-    y += 400;
-    d -= 146097;
+  if (d > 0) {
+    if (d > 146097) {
+      y += 400;
+      d -= 146097;
+    }
+  } else {
+    if (d > -365) {
+      // We often hit the previous year when stepping a civil time backwards,
+      // so special case it to avoid counting up by 100/4/1-year chunks.
+      y -= 1;
+      d += days_per_year(y, m);
+    } else {
+      y -= 400;
+      d += 146097;
+    }
   }
   if (d > 365) {
     for (int n = days_per_century(y, m); d > n; n = days_per_century(y, m)) {
@@ -440,7 +447,7 @@ using civil_second = civil_time<second_tag>;
 // Relational operators that work with differently aligned objects.
 // Always compares all six fields.
 template <typename T1, typename T2>
-CONSTEXPR_T bool operator<(const civil_time<T1>& lhs,
+CONSTEXPR_F bool operator<(const civil_time<T1>& lhs,
                            const civil_time<T2>& rhs) noexcept {
   return (lhs.year() < rhs.year() ||
           (lhs.year() == rhs.year() &&
@@ -455,29 +462,29 @@ CONSTEXPR_T bool operator<(const civil_time<T1>& lhs,
                    (lhs.second() < rhs.second())))))))))));
 }
 template <typename T1, typename T2>
-CONSTEXPR_T bool operator<=(const civil_time<T1>& lhs,
+CONSTEXPR_F bool operator<=(const civil_time<T1>& lhs,
                             const civil_time<T2>& rhs) noexcept {
   return !(rhs < lhs);
 }
 template <typename T1, typename T2>
-CONSTEXPR_T bool operator>=(const civil_time<T1>& lhs,
+CONSTEXPR_F bool operator>=(const civil_time<T1>& lhs,
                             const civil_time<T2>& rhs) noexcept {
   return !(lhs < rhs);
 }
 template <typename T1, typename T2>
-CONSTEXPR_T bool operator>(const civil_time<T1>& lhs,
+CONSTEXPR_F bool operator>(const civil_time<T1>& lhs,
                            const civil_time<T2>& rhs) noexcept {
   return rhs < lhs;
 }
 template <typename T1, typename T2>
-CONSTEXPR_T bool operator==(const civil_time<T1>& lhs,
+CONSTEXPR_F bool operator==(const civil_time<T1>& lhs,
                             const civil_time<T2>& rhs) noexcept {
   return lhs.year() == rhs.year() && lhs.month() == rhs.month() &&
          lhs.day() == rhs.day() && lhs.hour() == rhs.hour() &&
          lhs.minute() == rhs.minute() && lhs.second() == rhs.second();
 }
 template <typename T1, typename T2>
-CONSTEXPR_T bool operator!=(const civil_time<T1>& lhs,
+CONSTEXPR_F bool operator!=(const civil_time<T1>& lhs,
                             const civil_time<T2>& rhs) noexcept {
   return !(lhs == rhs);
 }
@@ -495,12 +502,22 @@ enum class weekday {
 };
 
 CONSTEXPR_F weekday get_weekday(const civil_day& cd) noexcept {
-  CONSTEXPR_D weekday k_weekday_by_thu_off[] = {
-      weekday::thursday,  weekday::friday,  weekday::saturday,
-      weekday::sunday,    weekday::monday,  weekday::tuesday,
-      weekday::wednesday,
+  CONSTEXPR_D weekday k_weekday_by_sun_off[7] = {
+      weekday::sunday,     weekday::monday,    weekday::tuesday,
+      weekday::wednesday,  weekday::thursday,  weekday::friday,
+      weekday::saturday,
   };
-  return k_weekday_by_thu_off[((cd - civil_day()) % 7 + 7) % 7];
+  CONSTEXPR_D int k_weekday_offsets[1 + 12] = {
+      -1, 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4,
+  };
+  year_t wd = cd.year() - (cd.month() < 3);
+  if (wd >= 0) {
+    wd += wd / 4 - wd / 100 + wd / 400;
+  } else {
+    wd += (wd - 3) / 4 - (wd - 99) / 100 + (wd - 399) / 400;
+  }
+  wd += k_weekday_offsets[cd.month()] + cd.day();
+  return k_weekday_by_sun_off[(wd % 7 + 7) % 7];
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -516,7 +533,11 @@ CONSTEXPR_F civil_day prev_weekday(civil_day cd, weekday wd) noexcept {
 }
 
 CONSTEXPR_F int get_yearday(const civil_day& cd) noexcept {
-  return static_cast<int>(cd - civil_day(civil_year(cd))) + 1;
+  CONSTEXPR_D int k_month_offsets[1 + 12] = {
+      -1, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
+  };
+  const int feb29 = (cd.month() > 2 && impl::is_leap_year(cd.year()));
+  return k_month_offsets[cd.month()] + feb29 + cd.day();
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -532,7 +553,6 @@ std::ostream& operator<<(std::ostream& os, weekday wd);
 }  // namespace detail
 }  // namespace cctz
 
-#undef CONSTEXPR_T
 #undef CONSTEXPR_M
 #undef CONSTEXPR_F
 #undef CONSTEXPR_D

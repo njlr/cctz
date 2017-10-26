@@ -18,20 +18,24 @@
 # endif
 #endif
 
-#include "time_zone.h"
-#include "time_zone_if.h"
+#include "cctz/time_zone.h"
 
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
 #include <limits>
+#include <string>
 #include <vector>
 #if !HAS_STRPTIME
 #include <iomanip>
 #include <sstream>
 #endif
+
+#include "cctz/civil_time.h"
+#include "time_zone_if.h"
 
 namespace cctz {
 namespace detail {
@@ -266,6 +270,7 @@ const std::int_fast64_t kExp10[kDigits10_64 + 1] = {
 std::string format(const std::string& format, const time_point<sys_seconds>& tp,
                    const detail::femtoseconds& fs, const time_zone& tz) {
   std::string result;
+  result.reserve(format.size());  // A reasonable guess for the result size.
   const time_zone::absolute_lookup al = tz.lookup(tp);
   const std::tm tm = ToTM(al);
 
@@ -520,7 +525,7 @@ const char* ParseTM(const char* dp, const char* fmt, std::tm* tm) {
 // support the tm_gmtoff extension to std::tm.  %Z is parsed but ignored.
 bool parse(const std::string& format, const std::string& input,
            const time_zone& tz, time_point<sys_seconds>* sec,
-           detail::femtoseconds* fs) {
+           detail::femtoseconds* fs, std::string* err) {
   // The unparsed input.
   const char* data = input.c_str();  // NUL terminated
 
@@ -723,13 +728,19 @@ bool parse(const std::string& format, const std::string& input,
     tm.tm_hour += 12;
   }
 
-  if (data == nullptr) return false;
+  if (data == nullptr) {
+    if (err != nullptr) *err = "Failed to parse input";
+    return false;
+  }
 
   // Skip any remaining whitespace.
   while (std::isspace(*data)) ++data;
 
   // parse() must consume the entire input string.
-  if (*data != '\0') return false;
+  if (*data != '\0') {
+    if (err != nullptr) *err = "Illegal trailing data in input string";
+    return false;
+  }
 
   // If we saw %s then we ignore anything else and return that time.
   if (saw_percent_s) {
@@ -752,22 +763,51 @@ bool parse(const std::string& format, const std::string& input,
 
   if (!saw_year) {
     year = year_t{tm.tm_year};
-    if (year > kyearmax - 1900) return false;
+    if (year > kyearmax - 1900) {
+      // Platform-dependent, maybe unreachable.
+      if (err != nullptr) *err = "Out-of-range year";
+      return false;
+    }
     year += 1900;
   }
 
-  const civil_second cs(year, tm.tm_mon + 1, tm.tm_mday,
-                        tm.tm_hour, tm.tm_min, tm.tm_sec);
+  const int month = tm.tm_mon + 1;
+  civil_second cs(year, month, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
-  // parse() fails if any normalization was done.  That is,
-  // parsing "Sep 31" will not produce the equivalent of "Oct 1".
-  if (cs.year() != year || cs.month() != tm.tm_mon + 1 ||
-      cs.day() != tm.tm_mday || cs.hour() != tm.tm_hour ||
-      cs.minute() != tm.tm_min || cs.second() != tm.tm_sec) {
+  // parse() should not allow normalization. Due to the restricted field
+  // ranges above (see ParseInt()), the only possibility is for days to roll
+  // into months. That is, parsing "Sep 31" should not produce "Oct 1".
+  if (cs.month() != month || cs.day() != tm.tm_mday) {
+    if (err != nullptr) *err = "Out-of-range field";
     return false;
   }
 
-  *sec = ptz.lookup(cs).pre - sys_seconds(offset);
+  // Accounts for the offset adjustment before converting to absolute time.
+  if ((offset < 0 && cs > civil_second::max() + offset) ||
+      (offset > 0 && cs < civil_second::min() + offset)) {
+    if (err != nullptr) *err = "Out-of-range field";
+    return false;
+  }
+  cs -= offset;
+
+  const auto tp = ptz.lookup(cs).pre;
+  // Checks for overflow/underflow and returns an error as necessary.
+  if (tp == time_point<sys_seconds>::max()) {
+    const auto al = ptz.lookup(time_point<sys_seconds>::max());
+    if (cs > al.cs) {
+      if (err != nullptr) *err = "Out-of-range field";
+      return false;
+    }
+  }
+  if (tp == time_point<sys_seconds>::min()) {
+    const auto al = ptz.lookup(time_point<sys_seconds>::min());
+    if (cs < al.cs) {
+      if (err != nullptr) *err = "Out-of-range field";
+      return false;
+    }
+  }
+
+  *sec = tp;
   *fs = subseconds;
   return true;
 }

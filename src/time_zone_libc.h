@@ -23,7 +23,7 @@ namespace cctz {
 
 // A time zone backed by gmtime_r(3), localtime_r(3), and mktime(3),
 // and which therefore only supports UTC and the local time zone.
-// TODO: Add support fixed offsets from UTC.
+// TODO: Add support for fixed offsets from UTC.
 class TimeZoneLibC : public TimeZoneIf {
  public:
   explicit TimeZoneLibC(const std::string& name);
@@ -33,6 +33,9 @@ class TimeZoneLibC : public TimeZoneIf {
       const time_point<sys_seconds>& tp) const override;
   time_zone::civil_lookup MakeTime(
       const civil_second& cs) const override;
+  std::string Description() const override;
+  bool NextTransition(time_point<sys_seconds>* tp) const override;
+  bool PrevTransition(time_point<sys_seconds>* tp) const override;
 
  private:
   const bool local_;  // localtime or UTC

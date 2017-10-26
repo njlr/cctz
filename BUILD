@@ -20,16 +20,18 @@ cc_library(
     name = "civil_time",
     srcs = ["src/civil_time_detail.cc"],
     hdrs = [
-        "include/civil_time.h",
+        "include/cctz/civil_time.h",
     ],
     includes = ["include"],
-    textual_hdrs = ["include/civil_time_detail.h"],
+    textual_hdrs = ["include/cctz/civil_time_detail.h"],
     visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "time_zone",
     srcs = [
+        "src/time_zone_fixed.cc",
+        "src/time_zone_fixed.h",
         "src/time_zone_format.cc",
         "src/time_zone_if.cc",
         "src/time_zone_if.h",
@@ -45,7 +47,8 @@ cc_library(
         "src/tzfile.h",
     ],
     hdrs = [
-        "include/time_zone.h",
+        "include/cctz/time_zone.h",
+        "include/cctz/zone_info_source.h",
     ],
     includes = ["include"],
     visibility = ["//visibility:public"],
@@ -54,37 +57,13 @@ cc_library(
 
 ### tests
 
-# Builds the Google Test source that was fetched from another repository.
-cc_library(
-    name = "gtest",
-    srcs = glob(
-        [
-            "google*/src/*.cc",
-        ],
-        exclude = glob([
-            "google*/src/*-all.cc",
-            "googlemock/src/gmock_main.cc",
-        ]),
-    ),
-    hdrs = glob(["*/include/**/*.h"]),
-    includes = [
-        "googlemock/",
-        "googlemock/include",
-        "googletest/",
-        "googletest/include",
-    ],
-    linkopts = ["-pthread"],
-    textual_hdrs = ["googletest/src/gtest-internal-inl.h"],
-    visibility = ["//visibility:public"],
-)
-
 cc_test(
     name = "civil_time_test",
     size = "small",
     srcs = ["src/civil_time_test.cc"],
     deps = [
         ":civil_time",
-        "@gtest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -95,7 +74,7 @@ cc_test(
     deps = [
         ":civil_time",
         ":time_zone",
-        "@gtest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -106,7 +85,27 @@ cc_test(
     deps = [
         ":civil_time",
         ":time_zone",
-        "@gtest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+### benchmarks
+
+cc_binary(
+    name = "benchmarks",
+    testonly = 1,
+    srcs = [
+        "src/benchmarks.cc",
+        "src/time_zone_if.h",
+        "src/time_zone_impl.h",
+        "src/time_zone_info.h",
+        "src/tzfile.h",
+    ],
+    linkstatic = 1,
+    deps = [
+        ":civil_time",
+        ":time_zone",
+        "@benchmark//:benchmark",
     ],
 )
 
@@ -120,10 +119,6 @@ cc_binary(
 cc_binary(
     name = "epoch_shift",
     srcs = ["examples/epoch_shift.cc"],
-    deps = [
-        ":civil_time",
-        ":time_zone",
-    ],
 )
 
 cc_binary(
@@ -138,10 +133,7 @@ cc_binary(
 cc_binary(
     name = "example2",
     srcs = ["examples/example2.cc"],
-    deps = [
-        ":civil_time",
-        ":time_zone",
-    ],
+    deps = [":time_zone"],
 )
 
 cc_binary(
@@ -175,7 +167,13 @@ cc_binary(
 
 cc_binary(
     name = "time_tool",
-    srcs = ["src/time_tool.cc"],
+    srcs = [
+        "src/time_tool.cc",
+        "src/time_zone_if.h",
+        "src/time_zone_impl.h",
+        "src/time_zone_info.h",
+        "src/tzfile.h",
+    ],
     deps = [
         ":civil_time",
         ":time_zone",
