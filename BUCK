@@ -14,6 +14,9 @@ cxx_library(
     'src/benchmarks.cc',
     'src/**/*_test.cc',
   ])),
+  licenses = [
+    'LICENSE.txt',
+  ],
   visibility = [
     'PUBLIC',
   ],
